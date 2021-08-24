@@ -21,7 +21,7 @@ struct ForthList {          /// vector helper template class
 	int  size()               { return (int)v.size(); }
     void push(T t)            { v.push_back(t); }
     void clear()              { v.clear(); }
-    void merge(vector<T>& v2) { v.insert(v.end(), v2.begin(), v2.end()); }
+    void merge(ForthList a)   { v.insert(v.end(), a.v.begin(), a.v.end()); }
     void erase(int i)         { v.erase(v.begin() + i, v.end()); }
 };
 class Code;                                 /// forward declaration
@@ -112,7 +112,7 @@ class ForthVM {
 public:
     ForthVM(istream& in, ostream& out) : cin(in), cout(out) {}
 	void init() {
-		static vector<Code*> prim = {                       /// singleton, build once only
+		const static vector<Code*> prim = {   /// singleton, built at compile time
 			// stack op
 			CODE("dup",  PUSH(top)),
 			CODE("over", PUSH(ss[-1])),
@@ -197,17 +197,17 @@ public:
 				 dict.push(new Code("temp"))),               // use last cell of dictionay as scratch pad
 			IMMD("else",
 				 Code *temp = dict[-1]; Code *last = dict[-2]->pf[-1];
-				 last->pf.merge(temp->pf.v);
+				 last->pf.merge(temp->pf);
 				 temp->pf.clear();
 				 last->stage = 1),
 			IMMD("then",
 				 Code *temp = dict[-1]; Code *last = dict[-2]->pf[-1];
 				 if (last->stage == 0) {                     // if...then
-					 last->pf.merge(temp->pf.v);
+					 last->pf.merge(temp->pf);
 					 dict.pop();
 				 }
 				 else {                                      // if...else...then, or
-					 last->pf1.merge(temp->pf.v);            // for...aft...then...next
+					 last->pf1.merge(temp->pf);              // for...aft...then...next
 					 if (last->stage == 1) dict.pop();
 					 else temp->pf.clear();
 				 }),
@@ -226,18 +226,18 @@ public:
 				 dict.push(new Code("temp"))),
 			IMMD("while",
 				 Code *last = dict[-2]->pf[-1]; Code *temp = dict[-1];
-				 last->pf.merge(temp->pf.v);
+				 last->pf.merge(temp->pf);
 				 temp->pf.clear(); last->stage = 2),
 			IMMD("repeat",
 				 Code *last = dict[-2]->pf[-1]; Code *temp = dict[-1];
-				 last->pf1.merge(temp->pf.v); dict.pop()),
+				 last->pf1.merge(temp->pf); dict.pop()),
 			IMMD("again",
 				 Code *last = dict[-2]->pf[-1]; Code *temp = dict[-1];
-				 last->pf.merge(temp->pf.v);
+				 last->pf.merge(temp->pf);
 				 last->stage = 1; dict.pop()),
 			IMMD("until",
 				 Code *last = dict[-2]->pf[-1]; Code *temp = dict[-1];
-				 last->pf.merge(temp->pf.v); dict.pop()),
+				 last->pf.merge(temp->pf); dict.pop()),
 			// loops - for...next, for...aft...then...next
 			CODE("cycle",
 				 do { for (Code* w : c->pf.v) call(w); }
@@ -253,12 +253,12 @@ public:
 				 dict.push(new Code("temp"))),
 			IMMD("aft",
 				 Code *last = dict[-2]->pf[-1]; Code *temp = dict[-1];
-				 last->pf.merge(temp->pf.v);
+				 last->pf.merge(temp->pf);
 				 temp->pf.clear(); last->stage = 3),
 			IMMD("next",
 				 Code *last = dict[-2]->pf[-1]; Code *temp = dict[-1];
-				 if (last->stage == 0) last->pf.merge(temp->pf.v);
-				 else last->pf2.merge(temp->pf.v); dict.pop()),
+				 if (last->stage == 0) last->pf.merge(temp->pf);
+				 else last->pf2.merge(temp->pf); dict.pop()),
 			// compiler
 			CODE("exit", throw domain_error(string())),
 			CODE("exec", int n = top; call(dict[n])),
@@ -304,7 +304,7 @@ public:
 				 Code *tgt = find(next_idiom());
 				 if (tgt) {
 					 tgt->pf.clear();
-					 tgt->pf.merge(dict[POP()]->pf.v); }),
+					 tgt->pf.merge(dict[POP()]->pf); }),
 			// tools
 			CODE("here",  PUSH(dict[-1]->token)),
 			CODE("words", words()),
@@ -319,7 +319,7 @@ public:
 				 dict.erase(Code::fence=max(w->token, find("boot")->token + 1))),
 			CODE("boot", dict.erase(Code::fence=find("boot")->token + 1))
 		};
-		dict.merge(prim); }                                 /// * populate dictionary
+		dict.v = prim; }                                 /// * populate dictionary
 	void outer() {
 		string idiom;
 		while (cin >> idiom) {
